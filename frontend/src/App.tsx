@@ -33,7 +33,11 @@ export default function App({
   const [txPending, setTxPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const aptosConfig = new AptosConfig({ network });
+  const fullnode =
+    typeof window !== "undefined" && window.location.hostname !== "localhost"
+      ? `${window.location.origin}/api/aptos-proxy/v1`
+      : undefined;
+  const aptosConfig = new AptosConfig({ network, fullnode });
   const aptos = new Aptos(aptosConfig);
 
   const fetchState = async () => {
