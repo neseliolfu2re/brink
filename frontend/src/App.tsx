@@ -38,7 +38,7 @@ export default function App({
   moduleAddress: string;
   network: import("@aptos-labs/ts-sdk").Network;
 }) {
-  const { account, connect, disconnect, connected, wallets, signTransaction } = useWallet();
+  const { account, connect, disconnect, connected, wallets, signTransaction, network: walletNetwork } = useWallet();
   const [state, setState] = useState<GameState | null>(null);
   const [displayTime, setDisplayTime] = useState<number>(0);
   const [events, setEvents] = useState<ChainEvent[]>([]);
@@ -58,22 +58,28 @@ export default function App({
     setLoading(true);
     setError(null);
     try {
-      const [fee, pool, roundId, timeRemaining, treasury, roundActive] = await Promise.all([
+      const [fee, pool, roundId, timeRemaining, treasury] = await Promise.all([
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_current_fee"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_pool_amount"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_round_id"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_time_remaining"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_treasury_amount"), functionArguments: [] } }),
-        aptos.view({ payload: { function: fullFn(moduleAddress, "get_round_active"), functionArguments: [] } }),
       ]);
       const tr = Number(timeRemaining[0]);
+      let roundActive = true;
+      try {
+        const [ra] = await aptos.view({ payload: { function: fullFn(moduleAddress, "get_round_active"), functionArguments: [] } });
+        roundActive = Boolean(ra);
+      } catch {
+        roundActive = Number(pool[0]) > 0 || tr < 300;
+      }
       setState({
         fee: String(fee[0]),
         pool: String(pool[0]),
         roundId: String(roundId[0]),
         timeRemaining: tr,
         treasury: String(treasury[0]),
-        roundActive: Boolean(roundActive[0]),
+        roundActive,
       });
       setDisplayTime(tr);
     } catch (e: unknown) {
@@ -144,9 +150,7 @@ export default function App({
           functionArguments: [],
         },
       });
-      const { authenticator } = await signTransaction({
-        transactionOrPayload: rawTxn,
-      });
+      const { authenticator } = await signTransaction({ transactionOrPayload: rawTxn });
       const res = await aptos.transaction.submit.simple({
         transaction: rawTxn,
         senderAuthenticator: authenticator,
@@ -154,7 +158,8 @@ export default function App({
       await aptos.waitForTransaction({ transactionHash: res.hash });
       await fetchState();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg.includes("module ABI") ? "Petra'da Network → Devnet seçili mi? Modül sadece Devnet'te yayınlı." : msg);
     } finally {
       setTxPending(false);
     }
@@ -165,6 +170,19 @@ export default function App({
 
   return (
     <>
+      {connected && walletNetwork && (walletNetwork.chainId === "1" || walletNetwork.chainId === "2") && (
+        <div className="card" style={{ background: "#7f1d1d", borderColor: "#ef444433" }}>
+          <p style={{ margin: 0, fontSize: "0.9rem", color: "#fecaca" }}>
+            ⚠️ <strong>Petra Devnet&apos;te olmalı!</strong> Settings → Network → Devnet seç. 
+            Modül sadece Devnet&apos;te; Mainnet/Testnet&apos;te &quot;module ABI&quot; hatası alırsın.
+          </p>
+        </div>
+      )}
+      <div className="card" style={{ background: "#1e3a2f", borderColor: "#22c55e33" }}>
+        <p style={{ margin: 0, fontSize: "0.8rem", color: "#86efac" }}>
+          Sözleşme Devnet&apos;te. Petra&apos;da <strong>Network → Devnet</strong> seçili olmalı.
+        </p>
+      </div>
       <div className="card">
         <h1>Last Click Wins</h1>
         {!connected ? (
