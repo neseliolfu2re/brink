@@ -1,0 +1,8 @@
+# Copy to config.yaml and run: aptos init --network Testnet
+# config.yaml is gitignored (contains private key)
+
+profiles:
+  default:
+    network: Devnet
+    rest_url: "https://fullnode.devnet.aptoslabs.com"
+    faucet_url: "https://faucet.devnet.aptoslabs.com"

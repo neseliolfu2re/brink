@@ -1,0 +1,15 @@
+[package]
+name = "last_click_wins"
+version = "0.1.0"
+authors = []
+
+[addresses]
+last_click_wins = "_"
+
+[dev-addresses]
+last_click_wins = "0x2"
+
+[dependencies]
+# Use aptos-node-v1.8.0 for compatibility with older Aptos CLI.
+# For latest: rev = "mainnet" + upgrade Aptos CLI to latest.
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "aptos-node-v1.8.0" }

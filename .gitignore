@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build
+build/
+frontend/dist/
+.move/
+
+# Env (may contain secrets)
+.env
+.env.local
+frontend/.env
+frontend/.env.local
+
+# Aptos config (contains private key)
+.aptos/config.yaml
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
