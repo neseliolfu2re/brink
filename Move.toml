@@ -10,6 +10,5 @@ last_click_wins = "_"
 last_click_wins = "0x2"
 
 [dependencies]
-# Use aptos-node-v1.8.0 for compatibility with older Aptos CLI.
-# For latest: rev = "mainnet" + upgrade Aptos CLI to latest.
-AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "aptos-node-v1.8.0" }
+# mainnet requires latest Aptos CLI (e.g. 1.8+). For older CLI use: rev = "aptos-node-v1.8.0"
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "mainnet" }

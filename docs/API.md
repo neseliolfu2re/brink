@@ -115,7 +115,15 @@ const aptAmount = Number(fee) / 1e8;
 ### `get_time_remaining`
 
 **Function:** `{MODULE_ADDRESS}::last_click_wins::get_time_remaining`  
-**Returns:** `u64` — Seconds until last clicker can claim (0 = now)
+**Returns:** `u64` — Seconds until last clicker can claim.  
+- No clicks: returns `timeout_seconds` (countdown not started).  
+- Active round: seconds left.  
+- Timeout passed: 0 (claimable).
+
+### `get_round_active`
+
+**Function:** `{MODULE_ADDRESS}::last_click_wins::get_round_active`  
+**Returns:** `bool` — True if at least one click has occurred this round.
 
 ---
 
@@ -181,7 +189,7 @@ Event handle is derived from the emitting module.
 | Code | Name                  | When                                           |
 |------|-----------------------|------------------------------------------------|
 | 1    | EALREADY_INITIALIZED  | Double init_module                             |
-| 4    | ECOOLDOWN_ACTIVE      | Click within 60s cooldown                      |
+| 4    | ECOOLDOWN_NOT_PASSED  | Click within 60s cooldown                      |
 | 5    | ETIMEOUT_NOT_REACHED  | Claim before 5-min timeout                     |
 | 6    | ENOT_LAST_CLICKER     | Non–last-clicker tries to claim                |
 | 7    | EPOOL_EMPTY           | Claim when no clicks / empty pool              |

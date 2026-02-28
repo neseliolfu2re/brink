@@ -69,3 +69,8 @@ button:disabled {
   font-weight: 600;
   color: #fafafa;
 }
+
+.stat-ticking {
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+}

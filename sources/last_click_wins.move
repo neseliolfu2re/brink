@@ -33,14 +33,14 @@ module last_click_wins::last_click_wins {
     const BPS_DENOMINATOR: u64 = 10_000;
 
     // ============ Errors ============
-
+    // Named for clarity: avoid magic numbers; clients map these to user-friendly messages.
     const EALREADY_INITIALIZED: u64 = 1;
     const ENOT_INITIALIZED: u64 = 2;
     const EINSUFFICIENT_FEE: u64 = 3;
-    const ECOOLDOWN_ACTIVE: u64 = 4;
-    const ETIMEOUT_NOT_REACHED: u64 = 5;
-    const ENOT_LAST_CLICKER: u64 = 6;
-    const EPOOL_EMPTY: u64 = 7;
+    const ECOOLDOWN_NOT_PASSED: u64 = 4;   // Address must wait cooldown_seconds before next click.
+    const ETIMEOUT_NOT_REACHED: u64 = 5;   // Last clicker cannot claim until timeout expires.
+    const ENOT_LAST_CLICKER: u64 = 6;      // Only the last clicker can claim the pool.
+    const EPOOL_EMPTY: u64 = 7;            // No clicks yet or pool already claimed.
     const ENOT_PROTOCOL_ADMIN: u64 = 8;
     const ETREASURY_EMPTY: u64 = 9;
 
@@ -126,7 +126,7 @@ module last_click_wins::last_click_wins {
         // Enforce cooldown: address can only click again after cooldown_seconds from last click.
         if (table::contains(&game.cooldowns, account_addr)) {
             let cooldown_until = *table::borrow(&game.cooldowns, account_addr);
-            assert!(now >= cooldown_until, error::invalid_argument(ECOOLDOWN_ACTIVE));
+            assert!(now >= cooldown_until, error::invalid_argument(ECOOLDOWN_NOT_PASSED));
         };
 
         let to_pay = coin::withdraw<AptosCoin>(account, current_fee);
@@ -198,13 +198,23 @@ module last_click_wins::last_click_wins {
     }
 
     #[view]
-    /// Seconds remaining until last clicker can claim (0 if already claimable or no clicks yet).
+    /// Seconds until last clicker can claim.
+    /// - No clicks yet: returns timeout_seconds (countdown not started; nothing to claim).
+    /// - Countdown active: returns seconds left.
+    /// - Timeout passed: returns 0 (claimable).
     public fun get_time_remaining(): u64 acquires GameState {
         let game = borrow_global<GameState>(@last_click_wins);
         if (game.last_click_timestamp == 0) return game.timeout_seconds;
         let now = timestamp::now_seconds();
         let deadline = game.last_click_timestamp + game.timeout_seconds;
         if (now >= deadline) 0 else (deadline - now)
+    }
+
+    #[view]
+    /// True if at least one click has occurred this round (countdown has started).
+    public fun get_round_active(): bool acquires GameState {
+        let game = borrow_global<GameState>(@last_click_wins);
+        game.last_click_timestamp > 0
     }
 
     #[view]
@@ -262,6 +272,7 @@ module last_click_wins::last_click_wins {
         assert!(get_pool_amount() == 0, 0);
         assert!(get_treasury_amount() == 0, 0);
         assert!(get_time_remaining() == TIMEOUT_SECONDS, 0);
+        assert!(!get_round_active(), 0);
     }
 
     #[test(framework = @0x1, deployer = @last_click_wins)]

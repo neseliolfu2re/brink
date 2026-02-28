@@ -1,6 +1,6 @@
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 
 const APT_DECIMALS = 1e8;
 
@@ -10,11 +10,22 @@ type GameState = {
   roundId: string;
   timeRemaining: number;
   treasury: string;
+  roundActive: boolean;
+};
+
+type ChainEvent = {
+  type: string;
+  data: { clicker?: string; winner?: string; admin?: string; fee_octas?: string; amount_octas?: string; round_id?: string };
 };
 
 function formatApt(octas: string | number): string {
   const n = typeof octas === "string" ? Number(octas) : octas;
   return (n / APT_DECIMALS).toFixed(4);
+}
+
+function formatAddr(addr: string): string {
+  if (!addr || addr.length < 10) return addr ?? "";
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 const fullFn = (m: string, f: string) =>
@@ -27,8 +38,10 @@ export default function App({
   moduleAddress: string;
   network: import("@aptos-labs/ts-sdk").Network;
 }) {
-  const { account, connect, disconnect, connected, wallets, signAndSubmitTransaction } = useWallet();
+  const { account, connect, disconnect, connected, wallets, signTransaction } = useWallet();
   const [state, setState] = useState<GameState | null>(null);
+  const [displayTime, setDisplayTime] = useState<number>(0);
+  const [events, setEvents] = useState<ChainEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [txPending, setTxPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,55 +50,108 @@ export default function App({
     typeof window !== "undefined" && window.location.hostname !== "localhost"
       ? `${window.location.origin}/api/aptos-proxy/v1`
       : undefined;
-  const aptosConfig = new AptosConfig({ network, fullnode });
-  const aptos = new Aptos(aptosConfig);
+  const aptosConfig = useMemo(() => new AptosConfig({ network, fullnode }), [network, fullnode]);
+  const aptos = useMemo(() => new Aptos(aptosConfig), [aptosConfig]);
 
-  const fetchState = async () => {
+  const fetchState = useCallback(async () => {
     if (!moduleAddress) return;
     setLoading(true);
     setError(null);
     try {
-      const [fee, pool, roundId, timeRemaining, treasury] = await Promise.all([
+      const [fee, pool, roundId, timeRemaining, treasury, roundActive] = await Promise.all([
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_current_fee"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_pool_amount"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_round_id"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_time_remaining"), functionArguments: [] } }),
         aptos.view({ payload: { function: fullFn(moduleAddress, "get_treasury_amount"), functionArguments: [] } }),
+        aptos.view({ payload: { function: fullFn(moduleAddress, "get_round_active"), functionArguments: [] } }),
       ]);
+      const tr = Number(timeRemaining[0]);
       setState({
         fee: String(fee[0]),
         pool: String(pool[0]),
         roundId: String(roundId[0]),
-        timeRemaining: Number(timeRemaining[0]),
+        timeRemaining: tr,
         treasury: String(treasury[0]),
+        roundActive: Boolean(roundActive[0]),
       });
+      setDisplayTime(tr);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setState(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [moduleAddress, aptos]);
+
+  const fetchEvents = useCallback(async () => {
+    if (!moduleAddress) return;
+    try {
+      const evs = await aptos.getAccountEventsByEventType({
+        accountAddress: moduleAddress,
+        eventType: `${moduleAddress}::last_click_wins::ClickEvent`,
+        options: { limit: 5, orderBy: [{ creation_number: "desc" }] },
+      });
+      const parsed: ChainEvent[] = (evs as unknown[]).map((e: { data?: object }) => ({
+        type: "Click",
+        data: (e.data || {}) as ChainEvent["data"],
+      }));
+      try {
+        const claimEvs = await aptos.getAccountEventsByEventType({
+          accountAddress: moduleAddress,
+          eventType: `${moduleAddress}::last_click_wins::ClaimEvent`,
+          options: { limit: 3, orderBy: [{ creation_number: "desc" }] },
+        });
+        (claimEvs as unknown[]).forEach((e: { data?: object }) =>
+          parsed.push({ type: "Claim", data: (e.data || {}) as ChainEvent["data"] })
+        );
+      } catch {
+        /* claims may not exist yet */
+      }
+      setEvents(parsed.slice(0, 8));
+    } catch {
+      setEvents([]);
+    }
+  }, [moduleAddress, aptos]);
 
   useEffect(() => {
     fetchState();
-    const id = setInterval(fetchState, 2000);
-    return () => clearInterval(id);
-  }, [moduleAddress]);
+    fetchEvents();
+    const id = setInterval(fetchState, 5000);
+    const evId = setInterval(fetchEvents, 10000);
+    return () => {
+      clearInterval(id);
+      clearInterval(evId);
+    };
+  }, [fetchState, fetchEvents]);
 
-  const handleClick = async () => {
-    if (!account || !connected || !signAndSubmitTransaction) return;
+  useEffect(() => {
+    if (displayTime <= 0) return;
+    const t = setInterval(() => setDisplayTime((d) => (d > 0 ? d - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, [displayTime]);
+
+  const submitTx = async (fn: string) => {
+    if (!account || !signTransaction) return;
     setTxPending(true);
     setError(null);
     try {
-      const { hash } = await signAndSubmitTransaction({
+      const rawTxn = await aptos.transaction.build.simple({
+        sender: account.address,
         data: {
-          function: fullFn(moduleAddress, "click"),
+          function: fullFn(moduleAddress, fn),
           typeArguments: [],
           functionArguments: [],
         },
       });
-      await aptos.waitForTransaction({ transactionHash: hash });
+      const { authenticator } = await signTransaction({
+        transactionOrPayload: rawTxn,
+      });
+      const res = await aptos.transaction.submit.simple({
+        transaction: rawTxn,
+        senderAuthenticator: authenticator,
+      });
+      await aptos.waitForTransaction({ transactionHash: res.hash });
       await fetchState();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -94,26 +160,8 @@ export default function App({
     }
   };
 
-  const handleClaim = async () => {
-    if (!account || !connected || !signAndSubmitTransaction) return;
-    setTxPending(true);
-    setError(null);
-    try {
-      const { hash } = await signAndSubmitTransaction({
-        data: {
-          function: fullFn(moduleAddress, "claim_if_timeout"),
-          typeArguments: [],
-          functionArguments: [],
-        },
-      });
-      await aptos.waitForTransaction({ transactionHash: hash });
-      await fetchState();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setTxPending(false);
-    }
-  };
+  const handleClick = () => submitTx("click");
+  const handleClaim = () => submitTx("claim_if_timeout");
 
   return (
     <>
@@ -153,9 +201,11 @@ export default function App({
                 <div className="stat-value">{formatApt(state.pool)} APT</div>
                 <div className="stat">Round #{state.roundId}</div>
                 <div className="stat">Time until claimable</div>
-                <div className="stat-value">
-                  {state.timeRemaining > 0
-                    ? `${Math.floor(state.timeRemaining / 60)}:${String(state.timeRemaining % 60).padStart(2, "0")}`
+                <div className="stat-value stat-ticking">
+                  {!state.roundActive
+                    ? "Waiting for first click"
+                    : displayTime > 0
+                    ? `${Math.floor(displayTime / 60)}:${String(displayTime % 60).padStart(2, "0")}`
                     : "Now"}
                 </div>
                 <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
@@ -165,7 +215,7 @@ export default function App({
                   <button
                     className="btn-outline"
                     onClick={handleClaim}
-                    disabled={txPending || state.timeRemaining > 0}
+                    disabled={txPending || displayTime > 0 || !state.roundActive}
                   >
                     Claim
                   </button>
@@ -180,6 +230,23 @@ export default function App({
           </p>
         )}
       </div>
+      {events.length > 0 && (
+        <div className="card">
+          <h3 style={{ fontSize: "0.9rem", marginBottom: "0.75rem" }}>Recent activity</h3>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "0.8rem", color: "#a1a1aa" }}>
+            {events.slice(0, 5).map((e, i) => (
+              <li key={i} style={{ padding: "0.25rem 0", borderBottom: "1px solid #27272a" }}>
+                {e.type === "Click" && (
+                  <>Click by {formatAddr(String(e.data?.clicker ?? ""))} — +{formatApt(e.data?.fee_octas ?? 0)} APT → pool</>
+                )}
+                {e.type === "Claim" && (
+                  <>Claim by {formatAddr(String(e.data?.winner ?? ""))} — {formatApt(e.data?.amount_octas ?? 0)} APT</>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p style={{ fontSize: "0.75rem", color: "#71717a" }}>
         Module: {moduleAddress}
       </p>
