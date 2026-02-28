@@ -78,6 +78,11 @@ aptos move test --dev
 
 The deployer account address **is** the module address; `init_module` runs at publish and creates the single global `GameState` at that address.
 
+**Devnet (önerilen — faucet çalışır):**
+```powershell
+.\scripts\deploy-devnet.ps1
+```
+
 **One-command deploy (Testnet)**
 
 ```powershell
@@ -199,6 +204,14 @@ As the countdown ticks, the incentive to be last intensifies. The pool grows; th
 - Fee increases each click: `current_fee = base_fee + (click_count * increment)`.
 - Per-address cooldown is enforced.
 - Each round has a single winner (the last clicker).
+
+## Troubleshooting: "Could not find module ABI"
+
+Bu hata genelde wallet'ın modül ABI'sini çekemediğinde oluşur.
+
+1. **Wallet Devnet'te mi?** Settings → Network → Devnet
+2. **Başka wallet dene:** Martian veya Fewcha (Petra yerine)
+3. **Yeniden deploy:** `.\scripts\deploy-devnet.ps1` — güncel framework ile deploy et, Vercel env'de `VITE_MODULE_ADDRESS` güncelle
 
 ## Disclaimer
 

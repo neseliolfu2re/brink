@@ -15,7 +15,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <AptosWalletAdapterProvider
       autoConnect
       dappConfig={{ network: NETWORK }}
-      optInWallets={["Petra"]}
+      optInWallets={["Petra", "Martian", "Fewcha"]}
     >
       <App moduleAddress={MODULE_ADDRESS} network={NETWORK} />
     </AptosWalletAdapterProvider>

@@ -187,7 +187,8 @@ export default function App({
       )}
       <div className="card" style={{ background: "#1e3a2f", borderColor: "#22c55e33" }}>
         <p style={{ margin: 0, fontSize: "0.8rem", color: "#86efac" }}>
-          Sözleşme Devnet&apos;te. Petra&apos;da <strong>Network → Devnet</strong> seçili olmalı.
+          Sözleşme Devnet&apos;te. Wallet&apos;ta <strong>Network → Devnet</strong> seç. 
+          Petra ABI hatası verirse <strong>Martian</strong> veya <strong>Fewcha</strong> dene.
         </p>
       </div>
       <div className="card">
