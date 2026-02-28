@@ -1,8 +1,13 @@
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk";
+import type { EntryFunctionABI } from "@aptos-labs/ts-sdk";
 import { useEffect, useState, useCallback, useMemo } from "react";
 
 const APT_DECIMALS = 1e8;
+
+// Static ABI — chain'den çekmeyi atla (module ABI hatası bypass)
+const CLICK_ABI: EntryFunctionABI = { typeParameters: [], parameters: [] };
+const CLAIM_ABI: EntryFunctionABI = { typeParameters: [], parameters: [] };
 
 type GameState = {
   fee: string;
@@ -142,12 +147,14 @@ export default function App({
     setTxPending(true);
     setError(null);
     try {
+      const abi = fn === "click" ? CLICK_ABI : CLAIM_ABI;
       const rawTxn = await aptos.transaction.build.simple({
         sender: account.address,
         data: {
           function: fullFn(moduleAddress, fn),
           typeArguments: [],
           functionArguments: [],
+          abi,
         },
       });
       const { authenticator } = await signTransaction({ transactionOrPayload: rawTxn });
