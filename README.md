@@ -37,6 +37,16 @@ click/
 
 ## Step-by-step
 
+### 0. Push to GitHub
+
+```bash
+# Repo already initialized and committed. Create repo on github.com (New repository).
+# Then:
+git remote add origin https://github.com/YOUR_USERNAME/last-click-wins.git
+git branch -M main
+git push -u origin main
+```
+
 ### 1. Prerequisites
 
 - Install [Aptos CLI](https://github.com/aptos-labs/aptos-core/releases) (latest so Move compiler matches the framework).
